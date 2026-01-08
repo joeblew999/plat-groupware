@@ -1,0 +1,72 @@
+[
+  {
+    "id": "doc-001",
+    "title": "Introduction to Full-Text Search",
+    "body": "Full-text search is a technique for searching text within documents. Unlike simple pattern matching, full-text search uses linguistic analysis to find relevant matches even when exact words don't appear.",
+    "category": "tutorial",
+    "tags": ["search", "introduction", "basics"]
+  },
+  {
+    "id": "doc-002",
+    "title": "SeekStorm Performance Benchmarks",
+    "body": "SeekStorm achieves sub-millisecond query latency with SIMD acceleration. Benchmarks show 7x faster query performance compared to traditional search engines, with support for billion-scale indices.",
+    "category": "documentation",
+    "tags": ["performance", "benchmarks", "speed"]
+  },
+  {
+    "id": "doc-003",
+    "title": "Building a Search API with Rust",
+    "body": "Learn how to build a high-performance search API using Rust and SeekStorm. This tutorial covers index creation, document ingestion, and query handling with the REST API.",
+    "category": "tutorial",
+    "tags": ["rust", "api", "development"]
+  },
+  {
+    "id": "doc-004",
+    "title": "Groupware Email Integration",
+    "body": "Integrating email search into your groupware platform enables users to quickly find messages, attachments, and conversations. This guide covers indexing email content with SeekStorm.",
+    "category": "integration",
+    "tags": ["email", "groupware", "integration"]
+  },
+  {
+    "id": "doc-005",
+    "title": "Faceted Search Implementation",
+    "body": "Faceted search allows users to filter results by categories, dates, or other attributes. SeekStorm supports string and numeric range facets for building powerful filter interfaces.",
+    "category": "documentation",
+    "tags": ["facets", "filtering", "ui"]
+  },
+  {
+    "id": "doc-006",
+    "title": "Real-Time Indexing Best Practices",
+    "body": "SeekStorm provides true real-time indexing with incremental updates. Documents become searchable immediately after insertion without requiring a full index rebuild.",
+    "category": "documentation",
+    "tags": ["indexing", "real-time", "best-practices"]
+  },
+  {
+    "id": "doc-007",
+    "title": "Multi-Tenant Search Architecture",
+    "body": "Deploy SeekStorm as a multi-tenant search service with API key management. Each tenant gets isolated indices while sharing the same server infrastructure for cost efficiency.",
+    "category": "architecture",
+    "tags": ["multi-tenancy", "saas", "architecture"]
+  },
+  {
+    "id": "doc-008",
+    "title": "PDF Document Indexing",
+    "body": "SeekStorm can extract and index text from PDF documents. Configure the PDF feature flag during build to enable document ingestion from file uploads or URLs.",
+    "category": "documentation",
+    "tags": ["pdf", "documents", "ingestion"]
+  },
+  {
+    "id": "doc-009",
+    "title": "Fuzzy Search and Typo Tolerance",
+    "body": "Enable fuzzy search to help users find results even with typos or misspellings. SeekStorm uses edit distance algorithms to match approximate terms.",
+    "category": "documentation",
+    "tags": ["fuzzy", "typos", "user-experience"]
+  },
+  {
+    "id": "doc-010",
+    "title": "Calendar and Contact Search",
+    "body": "Index calendar events and contacts alongside emails for a unified groupware search experience. Users can find meetings, attendees, and appointments with a single query.",
+    "category": "integration",
+    "tags": ["calendar", "contacts", "groupware"]
+  }
+]

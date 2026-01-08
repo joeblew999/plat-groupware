@@ -1,0 +1,43 @@
+version: "0.5"
+
+# Load environment variables from .env file
+env_file: .env
+
+processes:
+  nats-server:
+    command: task nats-server:start
+    readiness_probe:
+      exec:
+        command: task nats-cli:rtt
+      initial_delay_seconds: 1
+      period_seconds: 2
+
+  # NATS to SSE bridge for browser real-time updates
+  nats2sse:
+    command: task nats2sse:start
+    depends_on:
+      nats-server:
+        condition: process_healthy
+    readiness_probe:
+      exec:
+        command: 'curl -sf http://localhost:$NATS2SSE_PORT/static/index.html || exit 1'
+      initial_delay_seconds: 3
+      period_seconds: 5
+
+  # Stalwart Mail Server
+  stalwart:
+    command: task stalwart:start
+    readiness_probe:
+      exec:
+        command: 'curl -sf http://localhost:$STALWART_HTTP_PORT/api/healthz || exit 1'
+      initial_delay_seconds: 5
+      period_seconds: 10
+
+  # SeekStorm Search Engine
+  seekstorm:
+    command: task seekstorm:start
+    readiness_probe:
+      exec:
+        command: 'curl -sf http://localhost:$SEEKSTORM_PORT/health || exit 1'
+      initial_delay_seconds: 5
+      period_seconds: 10

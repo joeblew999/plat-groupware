@@ -1,0 +1,111 @@
+version: '3'
+
+env:
+  GOWORK: 'off'
+
+# Load .env first, then .env.local overrides (for secrets)
+dotenv: ['.env', '.env.local']
+
+# Remote includes from UAV-simulator (shared infrastructure)
+includes:
+  nats-server:
+    taskfile: ../UAV-simulator/systems/nats-server/Taskfile.nats-server.yml
+    vars:
+      ROOT_DIR: '{{.PWD}}'
+  nats-cli:
+    taskfile: ../UAV-simulator/systems/nats-cli/Taskfile.nats-cli.yml
+    vars:
+      ROOT_DIR: '{{.PWD}}'
+  narun:
+    taskfile: ../UAV-simulator/systems/narun/Taskfile.narun.yml
+    vars:
+      ROOT_DIR: '{{.PWD}}'
+  pc:
+    taskfile: ../UAV-simulator/systems/pc/Taskfile.pc.yml
+    vars:
+      ROOT_DIR: '{{.PWD}}'
+  nats2sse:
+    taskfile: ../UAV-simulator/systems/nats2sse/Taskfile.nats2sse.yml
+    vars:
+      ROOT_DIR: '{{.PWD}}'
+
+  # Local systems
+  envsubst:
+    taskfile: ./systems/envsubst/Taskfile.envsubst.yml
+    vars:
+      ROOT_DIR: '{{.PWD}}'
+  stalwart:
+    taskfile: ./systems/stalwart/Taskfile.stalwart.yml
+    vars:
+      ROOT_DIR: '{{.PWD}}'
+  seekstorm:
+    taskfile: ./systems/seekstorm/Taskfile.seekstorm.yml
+    vars:
+      ROOT_DIR: '{{.PWD}}'
+  meilisearch:
+    taskfile: ./systems/meilisearch/Taskfile.meilisearch.yml
+    vars:
+      ROOT_DIR: '{{.PWD}}'
+
+vars:
+  # globals (that all included stuff also uses)
+  BIN_DIR: .bin
+  DATA_DIR: .data
+  SRC_DIR: .src
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
+
+  # Debug tasks
+  debug:
+    desc: Print root vars and env
+    cmds:
+      - echo "=== Root Vars ==="
+      - echo "BIN_DIR={{.BIN_DIR}}"
+      - echo "DATA_DIR={{.DATA_DIR}}"
+      - echo "SRC_DIR={{.SRC_DIR}}"
+      - echo ""
+      - echo "=== Env (.env) ==="
+      - echo "NATS_PORT=$NATS_PORT"
+      - echo "NATS_URL=$NATS_URL"
+      - echo "NARUN_PORT=$NARUN_PORT"
+      - echo "PC_PORT=$PC_PORT"
+      - echo "NATS2SSE_PORT=$NATS2SSE_PORT"
+      - echo "STALWART_HTTP_PORT=$STALWART_HTTP_PORT"
+      - echo "SEEKSTORM_PORT=$SEEKSTORM_PORT"
+      - echo "MEILISEARCH_PORT=$MEILISEARCH_PORT"
+    silent: true
+
+  debug:all:
+    desc: Print debug info for all systems
+    cmds:
+      - task: debug
+      - task: nats-server:debug:self
+      - task: nats-cli:debug:self
+      - task: narun:debug:self
+      - task: pc:debug:self
+      - task: nats2sse:debug:self
+      - task: stalwart:debug:self
+      - task: seekstorm:debug:self
+      - task: meilisearch:debug:self
+
+  # Deps tasks
+  deps:install:
+    desc: Install all external dependencies
+    deps:
+      - envsubst:deps:install
+      - pc:deps:install
+      - nats-server:deps:install
+      - nats-cli:deps:install
+      - stalwart:deps:install
+      - seekstorm:deps:install
+
+  deps:clean:
+    desc: Remove all installed dependencies
+    cmds:
+      - rm -rf {{.BIN_DIR}}
+      - rm -rf {{.SRC_DIR}}
+      - rm -rf {{.DATA_DIR}}

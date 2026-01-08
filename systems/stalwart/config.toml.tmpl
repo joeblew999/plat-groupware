@@ -1,0 +1,48 @@
+#############################################
+# Stalwart Mail Server Configuration
+# Generated from template - edit template not this file
+#############################################
+
+# HTTP/API listener (admin panel, JMAP, WebDAV)
+[server.listener."http"]
+protocol = "http"
+bind = ["127.0.0.1:${STALWART_HTTP_PORT}"]
+
+# SMTP listener
+[server.listener."smtp"]
+bind = ["127.0.0.1:${STALWART_SMTP_PORT}"]
+protocol = "smtp"
+
+# IMAP listener
+[server.listener."imap"]
+bind = ["127.0.0.1:${STALWART_IMAP_PORT}"]
+protocol = "imap"
+
+# Storage configuration (RocksDB - default embedded database)
+[storage]
+data = "rocksdb"
+fts = "rocksdb"
+blob = "rocksdb"
+lookup = "rocksdb"
+directory = "internal"
+
+[store."rocksdb"]
+type = "rocksdb"
+path = "${STALWART_DATA_DIR}/db"
+compression = "lz4"
+
+[directory."internal"]
+type = "internal"
+store = "rocksdb"
+
+# Logging
+[tracer."stdout"]
+type = "stdout"
+level = "${STALWART_LOG_LEVEL}"
+ansi = false
+enable = true
+
+# Admin fallback authentication
+[authentication.fallback-admin]
+user = "admin"
+secret = "${STALWART_ADMIN_PASSWORD}"

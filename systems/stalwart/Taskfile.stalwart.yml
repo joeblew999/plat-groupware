@@ -1,0 +1,146 @@
+version: '3'
+
+vars:
+  ROOT_DIR: '{{.ROOT_DIR | default "."}}'
+  BIN_DIR: '{{.ROOT_DIR}}/.bin'
+  SRC_DIR: '{{.ROOT_DIR}}/.src'
+  DATA_DIR: '{{.ROOT_DIR}}/.data'
+  EXE: '{{if eq OS "windows"}}.exe{{end}}'
+  ENVSUBST_BIN: '{{.BIN_DIR}}/envsubst{{.EXE}}'
+  STALWART_BIN: '{{.BIN_DIR}}/stalwart{{.EXE}}'
+  STALWART_CLI: '{{.BIN_DIR}}/stalwart-cli{{.EXE}}'
+  STALWART_SRC_DIR: '{{.SRC_DIR}}/stalwart'
+  STALWART_DATA_DIR: '{{.DATA_DIR}}/stalwart'
+  STALWART_REPO: 'github.com/stalwartlabs/stalwart'
+  STALWART_VERSION: '${STALWART_VERSION:-v0.15.3}'
+  STALWART_URL: 'http://localhost:${STALWART_HTTP_PORT:-8085}'
+
+tasks:
+  default:
+    internal: true
+    cmds:
+      - task: debug:self
+
+  "debug:self":
+    desc: Print all vars for debugging
+    cmds:
+      - echo "=== Stalwart Vars ==="
+      - echo "ROOT_DIR={{.ROOT_DIR}}"
+      - echo "BIN_DIR={{.BIN_DIR}}"
+      - echo "SRC_DIR={{.SRC_DIR}}"
+      - echo "STALWART_BIN={{.STALWART_BIN}}"
+      - echo "STALWART_CLI={{.STALWART_CLI}}"
+      - echo "STALWART_SRC_DIR={{.STALWART_SRC_DIR}}"
+      - echo "STALWART_DATA_DIR={{.STALWART_DATA_DIR}}"
+      - echo "STALWART_VERSION={{.STALWART_VERSION}}"
+      - echo ""
+      - echo "=== Env ==="
+      - echo "STALWART_HTTP_PORT=$STALWART_HTTP_PORT"
+      - echo "STALWART_SMTP_PORT=$STALWART_SMTP_PORT"
+      - echo "STALWART_IMAP_PORT=$STALWART_IMAP_PORT"
+    silent: true
+
+  # Dependencies
+  "deps:clone":
+    desc: Clone stalwart repo at specific version
+    status:
+      - test -d {{.STALWART_SRC_DIR}}
+    cmds:
+      - mkdir -p {{.SRC_DIR}}
+      - git clone --depth 1 --branch {{.STALWART_VERSION}} https://{{.STALWART_REPO}}.git {{.STALWART_SRC_DIR}}
+
+  "deps:install":
+    desc: Build stalwart from source (requires Rust)
+    deps: ["deps:clone"]
+    status:
+      - test -f {{.STALWART_BIN}}
+      - test -f {{.STALWART_CLI}}
+    cmds:
+      - mkdir -p {{.BIN_DIR}}
+      # Build with RocksDB (NATS feature has missing deps in v0.15.3)
+      - cd {{.STALWART_SRC_DIR}} && cargo build --release -p stalwart -p stalwart-cli --no-default-features --features "rocks"
+      - cp {{.STALWART_SRC_DIR}}/target/release/stalwart {{.STALWART_BIN}}
+      - cp {{.STALWART_SRC_DIR}}/target/release/stalwart-cli {{.STALWART_CLI}}
+
+  "deps:clean":
+    desc: Remove stalwart binaries and source
+    cmds:
+      - rm -f {{.STALWART_BIN}} {{.STALWART_CLI}}
+      - rm -rf {{.STALWART_SRC_DIR}}
+
+  # Config
+  "config:init":
+    desc: Initialize stalwart config from template
+    preconditions:
+      - sh: test -f {{.ENVSUBST_BIN}}
+        msg: "envsubst not installed. Run: task envsubst:deps:install"
+    status:
+      - test -f {{.STALWART_DATA_DIR}}/config.toml
+    env:
+      STALWART_DATA_DIR: '{{.STALWART_DATA_DIR}}'
+    cmds:
+      - mkdir -p {{.STALWART_DATA_DIR}}
+      - '{{.ENVSUBST_BIN}} < {{.ROOT_DIR}}/systems/stalwart/config.toml.tmpl > {{.STALWART_DATA_DIR}}/config.toml'
+
+  "config:regen":
+    desc: Regenerate stalwart config (deletes existing)
+    cmds:
+      - rm -f {{.STALWART_DATA_DIR}}/config.toml
+      - task: config:init
+
+  # Server lifecycle
+  start:
+    desc: Start stalwart mail server
+    deps: ["deps:install", "config:init"]
+    cmds:
+      - '{{.STALWART_BIN}} --config {{.STALWART_DATA_DIR}}/config.toml'
+
+  stop:
+    desc: Stop stalwart mail server
+    cmds:
+      - pkill -f '{{.STALWART_BIN}}' || true
+
+  # CLI commands (require STALWART_ADMIN_PASSWORD env var)
+  "cli":
+    desc: Run stalwart-cli with args (usage - task stalwart:cli -- <command>)
+    deps: ["deps:install"]
+    cmds:
+      - '{{.STALWART_CLI}} -u {{.STALWART_URL}} -c "$STALWART_ADMIN_PASSWORD" {{.CLI_ARGS}}'
+
+  "cli:queue":
+    desc: List message queue
+    deps: ["deps:install"]
+    cmds:
+      - '{{.STALWART_CLI}} -u {{.STALWART_URL}} -c "$STALWART_ADMIN_PASSWORD" queue list'
+
+  "cli:report":
+    desc: List DMARC/TLS reports
+    deps: ["deps:install"]
+    cmds:
+      - '{{.STALWART_CLI}} -u {{.STALWART_URL}} -c "$STALWART_ADMIN_PASSWORD" report list'
+
+  # REST API shortcuts
+  "api:health":
+    desc: Check server health via REST API
+    cmds:
+      - 'curl -sf {{.STALWART_URL}}/api/healthz || echo "Server not responding"'
+
+  "api:metrics":
+    desc: Get server metrics via REST API
+    cmds:
+      - 'curl -sf -u "admin:$STALWART_ADMIN_PASSWORD" {{.STALWART_URL}}/api/telemetry/metrics | jq .'
+
+  "api:principals":
+    desc: List all principals (users/domains) via REST API
+    cmds:
+      - 'curl -sf -u "admin:$STALWART_ADMIN_PASSWORD" {{.STALWART_URL}}/api/principal | jq .'
+
+  "api:queue:status":
+    desc: Get queue status via REST API
+    cmds:
+      - 'curl -sf -u "admin:$STALWART_ADMIN_PASSWORD" {{.STALWART_URL}}/api/queue/status | jq .'
+
+  "api:logs":
+    desc: Get recent logs via REST API
+    cmds:
+      - 'curl -sf -u "admin:$STALWART_ADMIN_PASSWORD" "{{.STALWART_URL}}/api/logs?limit=50" | jq .'

@@ -1,0 +1,37 @@
+[
+  {
+    "id": "doc-001",
+    "title": "Getting Started with Meilisearch",
+    "body": "Meilisearch is a powerful, fast, and easy-to-use search engine. It provides instant search results with typo tolerance and faceted search capabilities.",
+    "category": "tutorial",
+    "tags": ["search", "introduction", "basics"]
+  },
+  {
+    "id": "doc-002",
+    "title": "Meilisearch Performance",
+    "body": "Meilisearch delivers sub-50ms search results even with millions of documents. It uses a prefix-based algorithm optimized for user-facing search experiences.",
+    "category": "documentation",
+    "tags": ["performance", "speed", "optimization"]
+  },
+  {
+    "id": "doc-003",
+    "title": "Email Search Integration",
+    "body": "Integrate Meilisearch with Stalwart mail server for fast email search. Configure the external FTS store to index email content, subjects, and attachments.",
+    "category": "integration",
+    "tags": ["email", "stalwart", "fts"]
+  },
+  {
+    "id": "doc-004",
+    "title": "Typo Tolerance Configuration",
+    "body": "Meilisearch automatically handles typos and misspellings. Configure the number of allowed typos per word length for optimal search accuracy.",
+    "category": "documentation",
+    "tags": ["typos", "configuration", "accuracy"]
+  },
+  {
+    "id": "doc-005",
+    "title": "Faceted Search and Filters",
+    "body": "Use faceted search to let users filter results by category, date, or custom attributes. Meilisearch supports both string and numeric filters.",
+    "category": "documentation",
+    "tags": ["facets", "filters", "ui"]
+  }
+]

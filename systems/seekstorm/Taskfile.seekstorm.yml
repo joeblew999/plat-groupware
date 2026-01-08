@@ -1,0 +1,141 @@
+version: '3'
+
+vars:
+  ROOT_DIR: '{{.ROOT_DIR | default "."}}'
+  BIN_DIR: '{{.ROOT_DIR}}/.bin'
+  SRC_DIR: '{{.ROOT_DIR}}/.src'
+  DATA_DIR: '{{.ROOT_DIR}}/.data'
+  EXE: '{{if eq OS "windows"}}.exe{{end}}'
+  SEEKSTORM_BIN: '{{.BIN_DIR}}/seekstorm_server{{.EXE}}'
+  SEEKSTORM_SRC_DIR: '{{.SRC_DIR}}/seekstorm'
+  SEEKSTORM_DATA_DIR: '{{.DATA_DIR}}/seekstorm'
+  SEEKSTORM_REPO: 'github.com/SeekStorm/SeekStorm'
+  SEEKSTORM_VERSION: '${SEEKSTORM_VERSION:-v0.12.19}'
+  SEEKSTORM_URL: 'http://localhost:${SEEKSTORM_PORT:-8086}'
+
+tasks:
+  default:
+    internal: true
+    cmds:
+      - task: debug:self
+
+  "debug:self":
+    desc: Print all vars for debugging
+    cmds:
+      - echo "=== SeekStorm Vars ==="
+      - echo "ROOT_DIR={{.ROOT_DIR}}"
+      - echo "BIN_DIR={{.BIN_DIR}}"
+      - echo "SRC_DIR={{.SRC_DIR}}"
+      - echo "SEEKSTORM_BIN={{.SEEKSTORM_BIN}}"
+      - echo "SEEKSTORM_SRC_DIR={{.SEEKSTORM_SRC_DIR}}"
+      - echo "SEEKSTORM_DATA_DIR={{.SEEKSTORM_DATA_DIR}}"
+      - echo "SEEKSTORM_VERSION={{.SEEKSTORM_VERSION}}"
+      - echo ""
+      - echo "=== Env ==="
+      - echo "SEEKSTORM_PORT=$SEEKSTORM_PORT"
+      - echo "MASTER_KEY_SECRET=***"
+    silent: true
+
+  # Dependencies
+  "deps:clone":
+    desc: Clone SeekStorm repo at specific version
+    status:
+      - test -d {{.SEEKSTORM_SRC_DIR}}
+    cmds:
+      - mkdir -p {{.SRC_DIR}}
+      - git clone --depth 1 --branch {{.SEEKSTORM_VERSION}} https://{{.SEEKSTORM_REPO}}.git {{.SEEKSTORM_SRC_DIR}}
+
+  "deps:install":
+    desc: Build SeekStorm from source (requires Rust)
+    deps: ["deps:clone"]
+    status:
+      - test -f {{.SEEKSTORM_BIN}}
+    cmds:
+      - mkdir -p {{.BIN_DIR}}
+      - cd {{.SEEKSTORM_SRC_DIR}} && cargo build --release --bin seekstorm_server
+      - cp {{.SEEKSTORM_SRC_DIR}}/target/release/seekstorm_server {{.SEEKSTORM_BIN}}
+
+  "deps:clean":
+    desc: Remove SeekStorm binary and source
+    cmds:
+      - rm -f {{.SEEKSTORM_BIN}}
+      - rm -rf {{.SEEKSTORM_SRC_DIR}}
+
+  # Server lifecycle
+  start:
+    desc: Start SeekStorm search server
+    deps: ["deps:install"]
+    cmds:
+      - mkdir -p {{.SEEKSTORM_DATA_DIR}}
+      - '{{.SEEKSTORM_BIN}} --index-path {{.SEEKSTORM_DATA_DIR}} --port ${SEEKSTORM_PORT:-8086} --local-ip 127.0.0.1'
+    env:
+      MASTER_KEY_SECRET: '${MASTER_KEY_SECRET:-seekstorm-dev-key}'
+
+  stop:
+    desc: Stop SeekStorm search server
+    cmds:
+      - pkill -f '{{.SEEKSTORM_BIN}}' || true
+
+  # REST API shortcuts
+  "api:health":
+    desc: Check server health
+    cmds:
+      - 'curl -sf {{.SEEKSTORM_URL}}/health || echo "Server not responding"'
+
+  "api:indices":
+    desc: List all indices
+    cmds:
+      - 'curl -sf -H "apikey: $SEEKSTORM_API_KEY" {{.SEEKSTORM_URL}}/api/v1/index | jq .'
+
+  "api:create-index":
+    desc: Create a new index (usage - task seekstorm:api:create-index -- <index-name>)
+    cmds:
+      - |
+        curl -sf -X POST {{.SEEKSTORM_URL}}/api/v1/index \
+          -H "apikey: $SEEKSTORM_API_KEY" \
+          -H "Content-Type: application/json" \
+          -d '{"index_name": "{{.CLI_ARGS}}", "schema": [{"field_name": "title", "field_type": "Text"}, {"field_name": "body", "field_type": "Text"}]}' | jq .
+
+  "api:search":
+    desc: Search an index (usage - task seekstorm:api:search INDEX=myindex QUERY="search terms")
+    cmds:
+      - 'curl -sf "{{.SEEKSTORM_URL}}/api/v1/index/{{.INDEX}}/query?query={{.QUERY}}" -H "apikey: $SEEKSTORM_API_KEY" | jq .'
+
+  # Test data
+  "test:create-index":
+    desc: Create test index with document schema
+    cmds:
+      - |
+        curl -sf -X POST {{.SEEKSTORM_URL}}/api/v1/index \
+          -H "apikey: $SEEKSTORM_API_KEY" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "index_name": "documents",
+            "schema": [
+              {"field_name": "id", "field_type": "Text", "field_stored": true},
+              {"field_name": "title", "field_type": "Text", "field_stored": true},
+              {"field_name": "body", "field_type": "Text", "field_stored": true},
+              {"field_name": "category", "field_type": "Text", "field_stored": true},
+              {"field_name": "tags", "field_type": "Text", "field_stored": true}
+            ]
+          }' | jq .
+
+  "test:load-data":
+    desc: Load test documents into the documents index
+    cmds:
+      - |
+        curl -sf -X POST {{.SEEKSTORM_URL}}/api/v1/index/documents/doc \
+          -H "apikey: $SEEKSTORM_API_KEY" \
+          -H "Content-Type: application/json" \
+          -d @{{.ROOT_DIR}}/systems/seekstorm/testdata/documents.json | jq .
+
+  "test:search":
+    desc: Test search query (usage - task seekstorm:test:search QUERY="search terms")
+    cmds:
+      - 'curl -sf "{{.SEEKSTORM_URL}}/api/v1/index/documents/query?query={{.QUERY}}" -H "apikey: $SEEKSTORM_API_KEY" | jq .'
+
+  "test:setup":
+    desc: Create index and load test data
+    cmds:
+      - task: test:create-index
+      - task: test:load-data

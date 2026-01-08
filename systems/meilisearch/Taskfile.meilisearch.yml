@@ -1,0 +1,153 @@
+version: '3'
+
+vars:
+  ROOT_DIR: '{{.ROOT_DIR | default "."}}'
+  BIN_DIR: '{{.ROOT_DIR}}/.bin'
+  SRC_DIR: '{{.ROOT_DIR}}/.src'
+  DATA_DIR: '{{.ROOT_DIR}}/.data'
+  EXE: '{{if eq OS "windows"}}.exe{{end}}'
+  MEILISEARCH_BIN: '{{.BIN_DIR}}/meilisearch{{.EXE}}'
+  MEILISEARCH_SRC_DIR: '{{.SRC_DIR}}/meilisearch'
+  MEILISEARCH_DATA_DIR: '{{.DATA_DIR}}/meilisearch'
+  MEILISEARCH_REPO: 'github.com/meilisearch/meilisearch'
+  MEILISEARCH_VERSION: '${MEILISEARCH_VERSION:-v1.13.0}'
+  MEILISEARCH_URL: 'http://localhost:${MEILISEARCH_PORT:-7700}'
+
+tasks:
+  default:
+    internal: true
+    cmds:
+      - task: debug:self
+
+  "debug:self":
+    desc: Print all vars for debugging
+    cmds:
+      - echo "=== Meilisearch Vars ==="
+      - echo "ROOT_DIR={{.ROOT_DIR}}"
+      - echo "BIN_DIR={{.BIN_DIR}}"
+      - echo "SRC_DIR={{.SRC_DIR}}"
+      - echo "MEILISEARCH_BIN={{.MEILISEARCH_BIN}}"
+      - echo "MEILISEARCH_SRC_DIR={{.MEILISEARCH_SRC_DIR}}"
+      - echo "MEILISEARCH_DATA_DIR={{.MEILISEARCH_DATA_DIR}}"
+      - echo "MEILISEARCH_VERSION={{.MEILISEARCH_VERSION}}"
+      - echo ""
+      - echo "=== Env ==="
+      - echo "MEILISEARCH_PORT=$MEILISEARCH_PORT"
+      - echo "MEILI_MASTER_KEY=***"
+    silent: true
+
+  # Dependencies
+  "deps:clone":
+    desc: Clone Meilisearch repo at specific version
+    status:
+      - test -d {{.MEILISEARCH_SRC_DIR}}
+    cmds:
+      - mkdir -p {{.SRC_DIR}}
+      - git clone --depth 1 --branch {{.MEILISEARCH_VERSION}} https://{{.MEILISEARCH_REPO}}.git {{.MEILISEARCH_SRC_DIR}}
+
+  "deps:install":
+    desc: Build Meilisearch from source (requires Rust)
+    deps: ["deps:clone"]
+    status:
+      - test -f {{.MEILISEARCH_BIN}}
+    cmds:
+      - mkdir -p {{.BIN_DIR}}
+      - cd {{.MEILISEARCH_SRC_DIR}} && cargo build --release --bin meilisearch
+      - cp {{.MEILISEARCH_SRC_DIR}}/target/release/meilisearch {{.MEILISEARCH_BIN}}
+
+  "deps:clean":
+    desc: Remove Meilisearch binary and source
+    cmds:
+      - rm -f {{.MEILISEARCH_BIN}}
+      - rm -rf {{.MEILISEARCH_SRC_DIR}}
+
+  # Server lifecycle
+  start:
+    desc: Start Meilisearch search server
+    deps: ["deps:install"]
+    env:
+      MEILI_DB_PATH: '{{.MEILISEARCH_DATA_DIR}}/db'
+      MEILI_HTTP_ADDR: 'localhost:${MEILISEARCH_PORT:-7700}'
+      MEILI_MASTER_KEY: '${MEILI_MASTER_KEY:-meili-dev-key}'
+      MEILI_ENV: 'development'
+    cmds:
+      - mkdir -p {{.MEILISEARCH_DATA_DIR}}
+      - '{{.MEILISEARCH_BIN}}'
+
+  stop:
+    desc: Stop Meilisearch search server
+    cmds:
+      - pkill -f '{{.MEILISEARCH_BIN}}' || true
+
+  # REST API shortcuts
+  "api:health":
+    desc: Check server health
+    cmds:
+      - 'curl -sf {{.MEILISEARCH_URL}}/health | jq .'
+
+  "api:version":
+    desc: Get server version
+    cmds:
+      - 'curl -sf {{.MEILISEARCH_URL}}/version | jq .'
+
+  "api:stats":
+    desc: Get server stats
+    cmds:
+      - 'curl -sf {{.MEILISEARCH_URL}}/stats -H "Authorization: Bearer $MEILI_MASTER_KEY" | jq .'
+
+  "api:indexes":
+    desc: List all indexes
+    cmds:
+      - 'curl -sf {{.MEILISEARCH_URL}}/indexes -H "Authorization: Bearer $MEILI_MASTER_KEY" | jq .'
+
+  "api:create-index":
+    desc: Create a new index (usage - task meilisearch:api:create-index -- <index-name>)
+    cmds:
+      - |
+        curl -sf -X POST {{.MEILISEARCH_URL}}/indexes \
+          -H "Authorization: Bearer $MEILI_MASTER_KEY" \
+          -H "Content-Type: application/json" \
+          -d '{"uid": "{{.CLI_ARGS}}", "primaryKey": "id"}' | jq .
+
+  "api:search":
+    desc: Search an index (usage - task meilisearch:api:search INDEX=myindex QUERY="search terms")
+    cmds:
+      - |
+        curl -sf -X POST "{{.MEILISEARCH_URL}}/indexes/{{.INDEX}}/search" \
+          -H "Authorization: Bearer $MEILI_MASTER_KEY" \
+          -H "Content-Type: application/json" \
+          -d '{"q": "{{.QUERY}}"}' | jq .
+
+  # Test data
+  "test:create-index":
+    desc: Create test documents index
+    cmds:
+      - |
+        curl -sf -X POST {{.MEILISEARCH_URL}}/indexes \
+          -H "Authorization: Bearer $MEILI_MASTER_KEY" \
+          -H "Content-Type: application/json" \
+          -d '{"uid": "documents", "primaryKey": "id"}' | jq .
+
+  "test:load-data":
+    desc: Load test documents
+    cmds:
+      - |
+        curl -sf -X POST {{.MEILISEARCH_URL}}/indexes/documents/documents \
+          -H "Authorization: Bearer $MEILI_MASTER_KEY" \
+          -H "Content-Type: application/json" \
+          -d @{{.ROOT_DIR}}/systems/meilisearch/testdata/documents.json | jq .
+
+  "test:search":
+    desc: Test search query (usage - task meilisearch:test:search QUERY="search terms")
+    cmds:
+      - |
+        curl -sf -X POST "{{.MEILISEARCH_URL}}/indexes/documents/search" \
+          -H "Authorization: Bearer $MEILI_MASTER_KEY" \
+          -H "Content-Type: application/json" \
+          -d '{"q": "{{.QUERY}}"}' | jq .
+
+  "test:setup":
+    desc: Create index and load test data
+    cmds:
+      - task: test:create-index
+      - task: test:load-data
